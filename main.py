@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from app.barcode_service import BarcodeService
 from app.database import DatabaseManager
+from PySide6.QtGui import QAction
 
 
 class MainWindow(QMainWindow):
@@ -97,6 +98,17 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
+        # Menubar
+        menu_bar = self.menuBar()
+
+        operator_menu = menu_bar.addMenu("Operator")
+
+        self.logout_action = QAction("Logout Operator", self)
+        self.logout_action.setEnabled(False)
+        self.logout_action.triggered.connect(self.logout_operator)
+
+        operator_menu.addAction(self.logout_action)
+
     def set_result_style(self, status):
         styles = {
             "neutral": """
@@ -167,8 +179,37 @@ class MainWindow(QMainWindow):
         self.box_input.setEnabled(True)
         self.unit_input.setEnabled(True)
         self.start_button.setEnabled(False)
+        self.logout_action.setEnabled(True)
 
         self.box_input.setFocus()
+
+    def logout_operator(self):
+        if self.current_operator is None:
+            return
+
+        self.current_operator = None
+
+        self.operator_input.clear()
+        self.operator_input.setEnabled(True)
+
+        self.box_input.clear()
+        self.box_input.setEnabled(False)
+
+        self.unit_input.clear()
+        self.unit_input.setEnabled(False)
+
+        self.start_button.setEnabled(False)
+
+        self.operator_status.setText("Operator belum login")
+        self.operator_status.setStyleSheet(
+            "font-size: 14px; color: #666666;"
+        )
+
+        self.result_label.setText("Belum ada inspeksi")
+        self.set_result_style("neutral")
+
+        self.logout_action.setEnabled(False)
+        self.operator_input.setFocus()
 
     def focus_unit_input(self):
         box_barcode = self.box_input.text().strip()
