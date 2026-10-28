@@ -32,27 +32,14 @@ class BarcodeService:
     ):
         self.database = database
 
-        if rule is not None:
-            # Pertahankan aturan khusus jika diberikan.
-            self.rule = rule
-        else:
-            # Ambil konfigurasi ekstraksi dari SQLite.
-            settings = self.database.get_barcode_rule_settings()
-
-            self.rule = BarcodeRule(
-                box_start=settings["box_start_position"] - 1,
-                box_length=settings["box_length"],
-                unit_start=settings["unit_start_position"] - 1,
-                unit_length=settings["unit_length"],
-            )
+        # Tetap mendukung aturan khusus untuk kompatibilitas
+        # dengan kode atau pengujian yang sudah ada.
+        self.rule = rule or BarcodeRule()
 
     def validate_operator(self, operator_code):
         operator = self.database.get_operator(operator_code)
 
-        if operator is None:
-            return None
-
-        if operator["is_active"] != 1:
+        if operator is None or operator["is_active"] != 1:
             return None
 
         return {
@@ -71,9 +58,7 @@ class BarcodeService:
         if len(barcode) < end:
             return None
 
-        key = barcode[start:end]
-
-        return key or None
+        return barcode[start:end] or None
 
     def inspect(
         self,
@@ -85,41 +70,116 @@ class BarcodeService:
         box_barcode = box_barcode.strip()
         unit_barcode = unit_barcode.strip()
 
-        box_key = self.extract_key(
-            box_barcode,
-            self.rule.box_start,
-            self.rule.box_length,
-        )
-
-        unit_key = self.extract_key(
-            unit_barcode,
-            self.rule.unit_start,
-            self.rule.unit_length,
-        )
-
+        box_key = None
+        unit_key = None
+        matched_pair = None
         reason = None
 
         if not box_barcode or not unit_barcode:
             judgment = "NG"
             reason = "Barcode Box dan Barcode Unit wajib diisi."
 
-        elif box_key is None:
-            judgment = "NG"
-            reason = "Format Barcode Box tidak valid."
-
-        elif unit_key is None:
-            judgment = "NG"
-            reason = "Format Barcode Unit tidak valid."
-
-        elif not self.database.is_valid_barcode_pair(
-            box_key,
-            unit_key,
-        ):
-            judgment = "NG"
-            reason = "Pasangan Box Key dan Unit Key tidak terdaftar."
 
         else:
-            judgment = "OK"
+            pairs = self.database.get_all_barcode_pairs()
+            active_pairs = [
+                pair
+                for pair in pairs
+                if pair["is_active"] == 1
+            ]
+
+            # Jika tidak ada pasangan aktif, jangan anggap
+            # barcode pendek sebagai pasangan yang valid.
+            if not active_pairs:
+                judgment = "NG"
+                reason = "Pasangan Box Key dan Unit Key tidak terdaftar."
+
+                box_key = self.extract_key(
+                    box_barcode,
+                    self.rule.box_start,
+                    self.rule.box_length,
+                )
+                unit_key = self.extract_key(
+                    unit_barcode,
+                    self.rule.unit_start,
+                    self.rule.unit_length,
+                )
+
+            else:
+                # Cek apakah barcode cukup panjang untuk setidaknya
+                # satu aturan ekstraksi pasangan yang aktif.
+                box_can_be_extracted = any(
+                    self.extract_key(
+                        box_barcode,
+                        pair["box_start_position"] - 1,
+                        pair["box_length"],
+                    ) is not None
+                    for pair in active_pairs
+                )
+
+                unit_can_be_extracted = any(
+                    self.extract_key(
+                        unit_barcode,
+                        pair["unit_start_position"] - 1,
+                        pair["unit_length"],
+                    ) is not None
+                    for pair in active_pairs
+                )
+
+                if not box_can_be_extracted:
+                    judgment = "NG"
+                    reason = "Format Barcode Box tidak valid."
+
+                elif not unit_can_be_extracted:
+                    judgment = "NG"
+                    reason = "Format Barcode Unit tidak valid."
+
+                else:
+                    matched_pair = None
+
+                    for pair in active_pairs:
+                        candidate_box_key = self.extract_key(
+                            box_barcode,
+                            pair["box_start_position"] - 1,
+                            pair["box_length"],
+                        )
+
+                        candidate_unit_key = self.extract_key(
+                            unit_barcode,
+                            pair["unit_start_position"] - 1,
+                            pair["unit_length"],
+                        )
+
+                        if (
+                            candidate_box_key == pair["box_key"]
+                            and candidate_unit_key == pair["unit_key"]
+                        ):
+                            matched_pair = pair
+                            box_key = candidate_box_key
+                            unit_key = candidate_unit_key
+                            break
+
+                    if matched_pair is not None:
+                        judgment = "OK"
+                        reason = None
+                    else:
+                        judgment = "NG"
+                        reason = (
+                            "Tidak ditemukan pasangan barcode aktif "
+                            "yang cocok dengan aturan ekstraksinya."
+                        )
+
+                        box_key = self.extract_key(
+                            box_barcode,
+                            self.rule.box_start,
+                            self.rule.box_length,
+                        )
+                        unit_key = self.extract_key(
+                            unit_barcode,
+                            self.rule.unit_start,
+                            self.rule.unit_length,
+                        )
+
 
         inspection_id = self.database.add_inspection(
             operator_code=operator_code,

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -20,48 +21,77 @@ class BarcodePairWindow(QMainWindow):
         super().__init__()
 
         self.database = database
+        self.editing_pair_id = None
 
         self.setWindowTitle("Master Data Pasangan Barcode")
-        self.resize(800, 550)
+        self.resize(1100, 650)
 
-        # Form input pasangan barcode
+        # Input key barcode
         self.box_key_input = QLineEdit()
-        self.box_key_input.setPlaceholderText(
-            "Contoh: 7036"
-        )
+        self.box_key_input.setPlaceholderText("Contoh: 7036")
 
         self.unit_key_input = QLineEdit()
-        self.unit_key_input.setPlaceholderText(
-            "Contoh: 7830H"
-        )
+        self.unit_key_input.setPlaceholderText("Contoh: 7830H")
+
+        # Input konfigurasi ekstraksi
+        self.box_start_input = QSpinBox()
+        self.box_start_input.setRange(1, 10000)
+        self.box_start_input.setValue(1)
+
+        self.box_length_input = QSpinBox()
+        self.box_length_input.setRange(1, 10000)
+        self.box_length_input.setValue(4)
+
+        self.unit_start_input = QSpinBox()
+        self.unit_start_input.setRange(1, 10000)
+        self.unit_start_input.setValue(1)
+
+        self.unit_length_input = QSpinBox()
+        self.unit_length_input.setRange(1, 10000)
+        self.unit_length_input.setValue(5)
 
         form_layout = QFormLayout()
+        form_layout.addRow("Box Key:", self.box_key_input)
+        form_layout.addRow("Unit Key:", self.unit_key_input)
         form_layout.addRow(
-            "Box Barcode Key:",
-            self.box_key_input,
+            "Box posisi mulai:",
+            self.box_start_input,
+        )
+        form_layout.addRow("Box length:", self.box_length_input)
+        form_layout.addRow(
+            "Unit posisi mulai:",
+            self.unit_start_input,
         )
         form_layout.addRow(
-            "Unit Barcode Key:",
-            self.unit_key_input,
+            "Unit length:",
+            self.unit_length_input,
         )
 
-        self.add_button = QPushButton(
-            "Tambah Pasangan Barcode"
-        )
-        self.add_button.clicked.connect(
-            self.add_barcode_pair
-        )
-
+        self.add_button = QPushButton("Tambah Pasangan Barcode")
+        self.add_button.clicked.connect(self.add_barcode_pair)
         form_layout.addRow(self.add_button)
+
+        self.edit_button = QPushButton("Muat Pasangan untuk Edit")
+        self.edit_button.clicked.connect(self.load_pair_for_edit)
+        form_layout.addRow(self.edit_button)
+
+        self.cancel_edit_button = QPushButton("Batal Edit")
+        self.cancel_edit_button.clicked.connect(self.reset_form)
+        self.cancel_edit_button.setEnabled(False)
+        form_layout.addRow(self.cancel_edit_button)
 
         # Tabel pasangan barcode
         self.pair_table = QTableWidget()
-        self.pair_table.setColumnCount(5)
+        self.pair_table.setColumnCount(9)
         self.pair_table.setHorizontalHeaderLabels(
             [
                 "ID",
                 "Box Key",
                 "Unit Key",
+                "Box Posisi",
+                "Box Length",
+                "Unit Posisi",
+                "Unit Length",
                 "Status",
                 "Terdaftar",
             ]
@@ -77,15 +107,11 @@ class BarcodePairWindow(QMainWindow):
             QTableWidget.SelectionMode.SingleSelection
         )
         self.pair_table.verticalHeader().setVisible(False)
-
         self.pair_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.ResizeToContents
         )
-        self.pair_table.horizontalHeader().setStretchLastSection(
-            True
-        )
+        self.pair_table.horizontalHeader().setStretchLastSection(True)
 
-        # Tombol perubahan status pasangan
         self.toggle_button = QPushButton(
             "Aktifkan / Nonaktifkan Pasangan"
         )
@@ -93,12 +119,9 @@ class BarcodePairWindow(QMainWindow):
             self.toggle_barcode_pair_status
         )
 
-        # Layout utama
         layout = QVBoxLayout()
         layout.addLayout(form_layout)
-        layout.addWidget(
-            QLabel("Daftar Pasangan Barcode")
-        )
+        layout.addWidget(QLabel("Daftar Pasangan Barcode"))
         layout.addWidget(self.pair_table, 1)
         layout.addWidget(self.toggle_button)
 
@@ -110,7 +133,6 @@ class BarcodePairWindow(QMainWindow):
 
     def refresh_barcode_pairs(self):
         pairs = self.database.get_all_barcode_pairs()
-
         self.pair_table.setRowCount(len(pairs))
 
         for row_index, pair in enumerate(pairs):
@@ -118,6 +140,10 @@ class BarcodePairWindow(QMainWindow):
                 pair["id"],
                 pair["box_key"],
                 pair["unit_key"],
+                pair["box_start_position"],
+                pair["box_length"],
+                pair["unit_start_position"],
+                pair["unit_length"],
                 "Aktif" if pair["is_active"] else "Nonaktif",
                 pair["created_at"],
             ]
@@ -125,15 +151,13 @@ class BarcodePairWindow(QMainWindow):
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
 
-                if column_index == 3:
-                    if value == "Aktif":
-                        item.setForeground(
-                            Qt.GlobalColor.darkGreen
-                        )
-                    else:
-                        item.setForeground(
-                            Qt.GlobalColor.red
-                        )
+                if column_index == 7:
+                    color = (
+                        Qt.GlobalColor.darkGreen
+                        if value == "Aktif"
+                        else Qt.GlobalColor.red
+                    )
+                    item.setForeground(color)
 
                 self.pair_table.setItem(
                     row_index,
@@ -154,10 +178,26 @@ class BarcodePairWindow(QMainWindow):
             return
 
         try:
-            self.database.add_barcode_pair(
-                box_key,
-                unit_key,
-            )
+            if self.editing_pair_id is None:
+                self.database.add_barcode_pair(
+                    box_key=box_key,
+                    unit_key=unit_key,
+                    box_start_position=self.box_start_input.value(),
+                    box_length=self.box_length_input.value(),
+                    unit_start_position=self.unit_start_input.value(),
+                    unit_length=self.unit_length_input.value(),
+                )
+            else:
+                self.database.update_barcode_pair(
+                    pair_id=self.editing_pair_id,
+                    box_key=box_key,
+                    unit_key=unit_key,
+                    box_start_position=self.box_start_input.value(),
+                    box_length=self.box_length_input.value(),
+                    unit_start_position=self.unit_start_input.value(),
+                    unit_length=self.unit_length_input.value(),
+                )        
+        
         except ValueError as error:
             QMessageBox.warning(
                 self,
@@ -173,8 +213,7 @@ class BarcodePairWindow(QMainWindow):
             )
             return
 
-        self.box_key_input.clear()
-        self.unit_key_input.clear()
+        self.reset_form()
         self.refresh_barcode_pairs()
 
         QMessageBox.information(
@@ -182,6 +221,62 @@ class BarcodePairWindow(QMainWindow):
             "Berhasil",
             "Pasangan barcode berhasil ditambahkan.",
         )
+
+    def load_pair_for_edit(self):
+        selected_row = self.pair_table.currentRow()
+
+        if selected_row < 0:
+            QMessageBox.warning(
+                self,
+                "Belum Ada Pilihan",
+                "Pilih pasangan barcode pada tabel terlebih dahulu.",
+            )
+            return
+
+        pair_id = int(self.pair_table.item(selected_row, 0).text())
+
+        pair = next(
+            (
+                item
+                for item in self.database.get_all_barcode_pairs()
+                if item["id"] == pair_id
+            ),
+            None,
+        )
+
+        if pair is None:
+            QMessageBox.warning(
+                self,
+                "Data Tidak Ditemukan",
+                "Pasangan barcode tidak ditemukan.",
+            )
+            self.refresh_barcode_pairs()
+            return
+
+        self.editing_pair_id = pair_id
+
+        self.box_key_input.setText(pair["box_key"])
+        self.unit_key_input.setText(pair["unit_key"])
+        self.box_start_input.setValue(pair["box_start_position"])
+        self.box_length_input.setValue(pair["box_length"])
+        self.unit_start_input.setValue(pair["unit_start_position"])
+        self.unit_length_input.setValue(pair["unit_length"])
+
+        self.add_button.setText("Simpan Perubahan Pasangan")
+        self.cancel_edit_button.setEnabled(True)
+
+    def reset_form(self):
+        self.editing_pair_id = None
+
+        self.box_key_input.clear()
+        self.unit_key_input.clear()
+        self.box_start_input.setValue(1)
+        self.box_length_input.setValue(4)
+        self.unit_start_input.setValue(1)
+        self.unit_length_input.setValue(5)
+
+        self.add_button.setText("Tambah Pasangan Barcode")
+        self.cancel_edit_button.setEnabled(False)
 
     def toggle_barcode_pair_status(self):
         selected_row = self.pair_table.currentRow()
@@ -194,14 +289,10 @@ class BarcodePairWindow(QMainWindow):
             )
             return
 
-        id_item = self.pair_table.item(selected_row, 0)
-        box_item = self.pair_table.item(selected_row, 1)
-        unit_item = self.pair_table.item(selected_row, 2)
-        status_item = self.pair_table.item(selected_row, 3)
-
-        pair_id = int(id_item.text())
-        box_key = box_item.text()
-        unit_key = unit_item.text()
+        pair_id = int(self.pair_table.item(selected_row, 0).text())
+        box_key = self.pair_table.item(selected_row, 1).text()
+        unit_key = self.pair_table.item(selected_row, 2).text()
+        status_item = self.pair_table.item(selected_row, 7)
 
         currently_active = status_item.text() == "Aktif"
         new_status = not currently_active
@@ -213,10 +304,8 @@ class BarcodePairWindow(QMainWindow):
         confirmation = QMessageBox.question(
             self,
             "Konfirmasi Perubahan Status",
-            (
-                "Apakah Anda yakin ingin {} pasangan "
-                "Box {} dan Unit {}?"
-            ).format(action_text, box_key, unit_key),
+            "Apakah Anda yakin ingin {} pasangan Box {} dan Unit {}?"
+            .format(action_text, box_key, unit_key),
             QMessageBox.StandardButton.Yes
             | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,

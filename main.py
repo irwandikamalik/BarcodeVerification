@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QTableWidget,
     QTableWidgetItem,
-    QSpinBox,
 )
 
 from app.barcode_service import BarcodeService
@@ -28,111 +27,6 @@ from app.operator_window import OperatorWindow
 from app.barcode_pair_window import BarcodePairWindow
 from app.csv_exporter import CSVExporter
 
-
-class BarcodeRuleSettingsWindow(QMainWindow):
-    def __init__(self, database, barcode_service):
-        super().__init__()
-
-        self.database = database
-        self.barcode_service = barcode_service
-
-        self.setWindowTitle("Pengaturan Ekstraksi Barcode")
-        self.resize(450, 300)
-
-        settings = self.database.get_barcode_rule_settings()
-
-        self.box_start_input = QSpinBox()
-        self.box_start_input.setRange(1, 9999)
-        self.box_start_input.setValue(
-            settings["box_start_position"]
-        )
-
-        self.box_length_input = QSpinBox()
-        self.box_length_input.setRange(1, 9999)
-        self.box_length_input.setValue(
-            settings["box_length"]
-        )
-
-        self.unit_start_input = QSpinBox()
-        self.unit_start_input.setRange(1, 9999)
-        self.unit_start_input.setValue(
-            settings["unit_start_position"]
-        )
-
-        self.unit_length_input = QSpinBox()
-        self.unit_length_input.setRange(1, 9999)
-        self.unit_length_input.setValue(
-            settings["unit_length"]
-        )
-
-        form_layout = QFormLayout()
-        form_layout.addRow(
-            "Box - Posisi mulai:",
-            self.box_start_input,
-        )
-        form_layout.addRow(
-            "Box - Length:",
-            self.box_length_input,
-        )
-        form_layout.addRow(
-            "Unit - Posisi mulai:",
-            self.unit_start_input,
-        )
-        form_layout.addRow(
-            "Unit - Length:",
-            self.unit_length_input,
-        )
-
-        group = QGroupBox("Konfigurasi Ekstraksi Key")
-        group.setLayout(form_layout)
-
-        self.save_button = QPushButton("Simpan Pengaturan")
-        self.save_button.clicked.connect(self.save_settings)
-
-        layout = QVBoxLayout()
-        layout.addWidget(group)
-        layout.addWidget(self.save_button)
-
-        central_widget = QWidget()
-        central_widget.setLayout(layout)
-        self.setCentralWidget(central_widget)
-
-    def save_settings(self):
-        try:
-            self.database.update_barcode_rule_settings(
-                box_start_position=self.box_start_input.value(),
-                box_length=self.box_length_input.value(),
-                unit_start_position=self.unit_start_input.value(),
-                unit_length=self.unit_length_input.value(),
-            )
-
-            # Terapkan aturan terbaru tanpa membuat ulang service.
-            self.barcode_service.rule = self.barcode_service.rule.__class__(
-                box_start=(
-                    self.box_start_input.value() - 1
-                ),
-                box_length=self.box_length_input.value(),
-                unit_start=(
-                    self.unit_start_input.value() - 1
-                ),
-                unit_length=self.unit_length_input.value(),
-                version=self.barcode_service.rule.version + 1,
-            )
-
-        except (ValueError, RuntimeError) as error:
-            QMessageBox.critical(
-                self,
-                "Gagal Menyimpan",
-                "Pengaturan gagal disimpan.\n\n{}".format(error),
-            )
-            return
-
-        QMessageBox.information(
-            self,
-            "Berhasil",
-            "Pengaturan ekstraksi barcode berhasil disimpan "
-            "dan langsung diterapkan.",
-        )
 
 
 class MainWindow(QMainWindow):
@@ -285,16 +179,6 @@ class MainWindow(QMainWindow):
         master_data_menu.addAction(self.manage_operators_action)
         master_data_menu.addAction(self.manage_barcode_pairs_action)
 
-        self.manage_barcode_rule_action = QAction(
-            "Pengaturan Ekstraksi Barcode",
-            self,
-        )
-        self.manage_barcode_rule_action.triggered.connect(
-            self.open_barcode_rule_settings_window
-        )
-
-        master_data_menu.addAction(self.manage_barcode_rule_action)
-
         operator_menu.addAction(self.logout_action)
 
         self.refresh_history()
@@ -402,13 +286,6 @@ class MainWindow(QMainWindow):
 
         self.logout_action.setEnabled(False)
         self.operator_input.setFocus()
-
-    def open_barcode_rule_settings_window(self):
-        self.barcode_rule_settings_window = BarcodeRuleSettingsWindow(
-            self.database,
-            self.barcode_service,
-        )
-        self.barcode_rule_settings_window.show()
 
     def open_operator_window(self):
         self.operator_window = OperatorWindow(self.database)

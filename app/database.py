@@ -117,6 +117,45 @@ class DatabaseManager:
                 """
             )
 
+            
+            # Migrasi: tambahkan konfigurasi ekstraksi ke setiap pasangan.
+            columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(barcode_pairs)"
+                ).fetchall()
+            }
+
+            new_columns = {
+                "box_start_position": (
+                    "INTEGER NOT NULL DEFAULT 1 "
+                    "CHECK (box_start_position >= 1)"
+                ),
+                "box_length": (
+                    "INTEGER NOT NULL DEFAULT 4 "
+                    "CHECK (box_length >= 1)"
+                ),
+                "unit_start_position": (
+                    "INTEGER NOT NULL DEFAULT 1 "
+                    "CHECK (unit_start_position >= 1)"
+                ),
+                "unit_length": (
+                    "INTEGER NOT NULL DEFAULT 5 "
+                    "CHECK (unit_length >= 1)"
+                ),
+            }
+
+            for column_name, column_definition in new_columns.items():
+                if column_name not in columns:
+                    connection.execute(
+                        "ALTER TABLE barcode_pairs ADD COLUMN "
+                        "{} {}".format(
+                            column_name,
+                            column_definition,
+                        )
+                    )
+
+
     def add_operator(self, operator_code, operator_name):
         operator_code = operator_code.strip()
         operator_name = operator_name.strip()
@@ -190,7 +229,16 @@ class DatabaseManager:
                 raise ValueError("Operator tidak ditemukan.")
 
 
-    def add_barcode_pair(self, box_key, unit_key):
+
+    def add_barcode_pair(
+        self,
+        box_key,
+        unit_key,
+        box_start_position=1,
+        box_length=4,
+        unit_start_position=1,
+        unit_length=5,
+    ):
         box_key = box_key.strip()
         unit_key = unit_key.strip()
 
@@ -199,14 +247,124 @@ class DatabaseManager:
                 "Box Key dan Unit Key wajib diisi."
             )
 
+        settings = {
+            "Box posisi mulai": box_start_position,
+            "Box length": box_length,
+            "Unit posisi mulai": unit_start_position,
+            "Unit length": unit_length,
+        }
+
+        for name, value in settings.items():
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 1
+            ):
+                raise ValueError(
+                    "{} harus berupa bilangan bulat positif.".format(
+                        name
+                    )
+                )
+
         with self.get_connection() as connection:
             connection.execute(
                 """
-                INSERT INTO barcode_pairs (box_key, unit_key)
-                VALUES (?, ?)
+                INSERT INTO barcode_pairs (
+                    box_key,
+                    unit_key,
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (box_key, unit_key),
+                (
+                    box_key,
+                    unit_key,
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length,
+                ),
             )
+
+    
+    def update_barcode_pair(
+        self,
+        pair_id,
+        box_key,
+        unit_key,
+        box_start_position,
+        box_length,
+        unit_start_position,
+        unit_length,
+    ):
+        if (
+            not isinstance(pair_id, int)
+            or isinstance(pair_id, bool)
+            or pair_id <= 0
+        ):
+            raise ValueError(
+                "ID pasangan harus berupa bilangan bulat positif."
+            )
+
+        box_key = box_key.strip()
+        unit_key = unit_key.strip()
+
+        if not box_key or not unit_key:
+            raise ValueError(
+                "Box Key dan Unit Key wajib diisi."
+            )
+
+        settings = {
+            "Box posisi mulai": box_start_position,
+            "Box length": box_length,
+            "Unit posisi mulai": unit_start_position,
+            "Unit length": unit_length,
+        }
+
+        for name, value in settings.items():
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 1
+            ):
+                raise ValueError(
+                    "{} harus berupa bilangan bulat positif.".format(
+                        name
+                    )
+                )
+
+        with self.get_connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE barcode_pairs
+                SET
+                    box_key = ?,
+                    unit_key = ?,
+                    box_start_position = ?,
+                    box_length = ?,
+                    unit_start_position = ?,
+                    unit_length = ?
+                WHERE id = ?
+                """,
+                (
+                    box_key,
+                    unit_key,
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length,
+                    pair_id,
+                ),
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(
+                    "Pasangan barcode tidak ditemukan."
+                )
+
 
     def is_valid_barcode_pair(self, box_key, unit_key):
         with self.get_connection() as connection:
@@ -232,6 +390,10 @@ class DatabaseManager:
                     id,
                     box_key,
                     unit_key,
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length,
                     is_active,
                     created_at
                 FROM barcode_pairs
