@@ -89,3 +89,60 @@ def test_custom_extraction_rule(tmp_path):
 
     assert service.extract_key("AB7830HP707636", 2, 5) == "7830H"
 
+
+def test_inactive_pair_returns_ng_and_saves_history(service):
+    # Pasangan yang terdaftar awalnya valid.
+    first_result = service.inspect(
+        "OP001",
+        "Operator Satu",
+        "7036-1234567",
+        "7830HP707636",
+    )
+
+    assert first_result.judgment == "OK"
+
+    # Nonaktifkan pasangan yang sama.
+    database = service.database
+    pairs = database.get_all_barcode_pairs()
+    pair_id = pairs[0]["id"]
+
+    database.set_barcode_pair_active(pair_id, False)
+
+    # Pasangan yang nonaktif seharusnya menghasilkan NG.
+    second_result = service.inspect(
+        "OP001",
+        "Operator Satu",
+        "7036-1234567",
+        "7830HP707636",
+    )
+
+    assert second_result.judgment == "NG"
+    assert second_result.reason is not None
+    assert second_result.inspection_id > first_result.inspection_id
+
+
+def test_deactivating_pair_preserves_inspection_history(service):
+    # Simpan hasil inspeksi pertama.
+    result = service.inspect(
+        "OP001",
+        "Operator Satu",
+        "7036-1234567",
+        "7830HP707636",
+    )
+
+    assert result.judgment == "OK"
+
+    # Nonaktifkan pasangan barcode.
+    database = service.database
+    pairs = database.get_all_barcode_pairs()
+    pair_id = pairs[0]["id"]
+
+    database.set_barcode_pair_active(pair_id, False)
+
+    # Riwayat inspeksi pertama tetap tersimpan.
+    history = database.get_recent_inspections(limit=10)
+
+    assert len(history) == 1
+    assert history[0]["judgment"] == "OK"
+    assert history[0]["box_key"] == "7036"
+    assert history[0]["unit_key"] == "7830H"

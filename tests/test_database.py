@@ -195,3 +195,40 @@ def test_set_operator_active_updates_status(db):
 def test_set_operator_active_rejects_unknown_operator(db):
     with pytest.raises(ValueError, match="Operator tidak ditemukan"):
         db.set_operator_active("OP999", False)
+
+
+
+def test_get_all_barcode_pairs_returns_active_and_inactive(db):
+    db.add_barcode_pair("7036", "7830H")
+    db.add_barcode_pair("8153", "7625U")
+
+    pairs = db.get_all_barcode_pairs()
+
+    assert len(pairs) == 2
+    assert pairs[0]["box_key"] == "7036"
+    assert pairs[0]["unit_key"] == "7830H"
+    assert pairs[0]["is_active"] == 1
+    assert pairs[1]["box_key"] == "8153"
+    assert pairs[1]["unit_key"] == "7625U"
+
+
+
+def test_set_barcode_pair_active_updates_status(db):
+    db.add_barcode_pair("7036", "7830H")
+
+    pairs = db.get_all_barcode_pairs()
+    pair_id = pairs[0]["id"]
+
+    db.set_barcode_pair_active(pair_id, False)
+
+    updated_pairs = db.get_all_barcode_pairs()
+
+    assert updated_pairs[0]["is_active"] == 0
+    assert db.is_valid_barcode_pair("7036", "7830H") is False
+
+
+def test_set_barcode_pair_active_rejects_unknown_pair(db):
+    import pytest
+
+    with pytest.raises(ValueError, match="Pasangan barcode tidak ditemukan"):
+        db.set_barcode_pair_active(999, False)

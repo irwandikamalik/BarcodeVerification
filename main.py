@@ -23,7 +23,7 @@ from app.database import DatabaseManager
 from PySide6.QtGui import QAction
 
 from app.operator_window import OperatorWindow
-
+from app.barcode_pair_window import BarcodePairWindow
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -151,7 +151,16 @@ class MainWindow(QMainWindow):
             self.open_operator_window
         )
 
+        self.manage_barcode_pairs_action = QAction(
+            "Manajemen Pasangan Barcode",
+            self,
+        )
+        self.manage_barcode_pairs_action.triggered.connect(
+            self.open_barcode_pair_window
+        )
+
         master_data_menu.addAction(self.manage_operators_action)
+        master_data_menu.addAction(self.manage_barcode_pairs_action)
 
         operator_menu.addAction(self.logout_action)
 
@@ -264,6 +273,10 @@ class MainWindow(QMainWindow):
     def open_operator_window(self):
         self.operator_window = OperatorWindow(self.database)
         self.operator_window.show()
+    
+    def open_barcode_pair_window(self):
+        self.barcode_pair_window = BarcodePairWindow(self.database)
+        self.barcode_pair_window.show()
 
     def focus_unit_input(self):
         box_barcode = self.box_input.text().strip()

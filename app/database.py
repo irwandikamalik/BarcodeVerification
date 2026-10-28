@@ -191,6 +191,50 @@ class DatabaseManager:
 
         return result is not None
 
+    
+    def get_all_barcode_pairs(self):
+        with self.get_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    box_key,
+                    unit_key,
+                    is_active,
+                    created_at
+                FROM barcode_pairs
+                ORDER BY box_key ASC, unit_key ASC
+                """
+            ).fetchall()
+
+        return rows
+
+    
+    def set_barcode_pair_active(self, pair_id, is_active):
+        if (
+            not isinstance(pair_id, int)
+            or isinstance(pair_id, bool)
+            or pair_id <= 0
+        ):
+            raise ValueError("ID pasangan harus berupa bilangan bulat positif.")
+
+        if not isinstance(is_active, bool):
+            raise ValueError("Status pasangan harus berupa True atau False.")
+
+        with self.get_connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE barcode_pairs
+                SET is_active = ?
+                WHERE id = ?
+                """,
+                (int(is_active), pair_id),
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError("Pasangan barcode tidak ditemukan.")
+
+
     def add_inspection(
         self,
         operator_code,
