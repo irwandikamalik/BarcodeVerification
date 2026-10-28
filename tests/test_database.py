@@ -150,3 +150,48 @@ def test_get_recent_inspections_respects_limit(tmp_path):
     assert len(rows) == 2
     assert rows[0]["box_barcode"] == "BOX-2"
     assert rows[1]["box_barcode"] == "BOX-1"
+
+
+def test_get_all_operators_returns_active_and_inactive(db):
+    db.add_operator("OP002", "Operator Dua")
+    db.add_operator("OP001", "Operator Satu")
+
+    with db.get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE operators
+            SET is_active = 0
+            WHERE operator_code = ?
+            """,
+            ("OP002",),
+        )
+
+    operators = db.get_all_operators()
+
+    assert len(operators) == 2
+
+    # Daftar harus diurutkan berdasarkan kode operator.
+    assert operators[0]["operator_code"] == "OP001"
+    assert operators[1]["operator_code"] == "OP002"
+
+    # Operator aktif dan nonaktif sama-sama ditampilkan.
+    assert operators[0]["is_active"] == 1
+    assert operators[1]["is_active"] == 0
+
+    # Data waktu pendaftaran juga tersedia.
+    assert operators[0]["created_at"] is not None
+
+
+def test_set_operator_active_updates_status(db):
+    db.add_operator("OP001", "Operator Satu")
+
+    db.set_operator_active("OP001", False)
+    assert db.get_operator("OP001")["is_active"] == 0
+
+    db.set_operator_active("OP001", True)
+    assert db.get_operator("OP001")["is_active"] == 1
+
+
+def test_set_operator_active_rejects_unknown_operator(db):
+    with pytest.raises(ValueError, match="Operator tidak ditemukan"):
+        db.set_operator_active("OP999", False)

@@ -22,6 +22,8 @@ from app.barcode_service import BarcodeService
 from app.database import DatabaseManager
 from PySide6.QtGui import QAction
 
+from app.operator_window import OperatorWindow
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -138,10 +140,23 @@ class MainWindow(QMainWindow):
         self.logout_action = QAction("Logout Operator", self)
         self.logout_action.setEnabled(False)
         self.logout_action.triggered.connect(self.logout_operator)
-        
-        self.refresh_history()
+
+        master_data_menu = menu_bar.addMenu("Master Data")
+
+        self.manage_operators_action = QAction(
+            "Manajemen Operator",
+            self,
+        )
+        self.manage_operators_action.triggered.connect(
+            self.open_operator_window
+        )
+
+        master_data_menu.addAction(self.manage_operators_action)
 
         operator_menu.addAction(self.logout_action)
+
+        self.refresh_history()
+
         
 
     def set_result_style(self, status):
@@ -245,6 +260,10 @@ class MainWindow(QMainWindow):
 
         self.logout_action.setEnabled(False)
         self.operator_input.setFocus()
+
+    def open_operator_window(self):
+        self.operator_window = OperatorWindow(self.database)
+        self.operator_window.show()
 
     def focus_unit_input(self):
         box_barcode = self.box_input.text().strip()

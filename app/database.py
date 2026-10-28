@@ -117,6 +117,47 @@ class DatabaseManager:
                 (operator_code.strip(),),
             ).fetchone()
 
+    
+    def get_all_operators(self):
+        with self.get_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    operator_code,
+                    operator_name,
+                    is_active,
+                    created_at
+                FROM operators
+                ORDER BY operator_code ASC
+                """
+            ).fetchall()
+
+        return rows
+
+    
+    def set_operator_active(self, operator_code, is_active):
+        operator_code = operator_code.strip()
+
+        if not operator_code:
+            raise ValueError("Kode operator wajib diisi.")
+
+        if not isinstance(is_active, bool):
+            raise ValueError("Status operator harus berupa True atau False.")
+
+        with self.get_connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE operators
+                SET is_active = ?
+                WHERE operator_code = ?
+                """,
+                (int(is_active), operator_code),
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError("Operator tidak ditemukan.")
+
+
     def add_barcode_pair(self, box_key, unit_key):
         box_key = box_key.strip()
         unit_key = unit_key.strip()
