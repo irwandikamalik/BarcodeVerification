@@ -24,13 +24,27 @@ class InspectionResult:
 
 
 class BarcodeService:
+
     def __init__(
         self,
         database: DatabaseManager,
         rule: Optional[BarcodeRule] = None,
     ):
         self.database = database
-        self.rule = rule or BarcodeRule()
+
+        if rule is not None:
+            # Pertahankan aturan khusus jika diberikan.
+            self.rule = rule
+        else:
+            # Ambil konfigurasi ekstraksi dari SQLite.
+            settings = self.database.get_barcode_rule_settings()
+
+            self.rule = BarcodeRule(
+                box_start=settings["box_start_position"] - 1,
+                box_length=settings["box_length"],
+                unit_start=settings["unit_start_position"] - 1,
+                unit_length=settings["unit_length"],
+            )
 
     def validate_operator(self, operator_code):
         operator = self.database.get_operator(operator_code)

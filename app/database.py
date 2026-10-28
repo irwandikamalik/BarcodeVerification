@@ -56,6 +56,38 @@ class DatabaseManager:
                 """
             )
 
+            # Konfigurasi ekstraksi key barcode.
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS barcode_rule_settings (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    box_start_position INTEGER NOT NULL
+                        CHECK (box_start_position >= 1),
+                    box_length INTEGER NOT NULL
+                        CHECK (box_length >= 1),
+                    unit_start_position INTEGER NOT NULL
+                        CHECK (unit_start_position >= 1),
+                    unit_length INTEGER NOT NULL
+                        CHECK (unit_length >= 1)
+                )
+                """
+            )
+
+            # Buat konfigurasi default hanya jika belum tersedia.
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO barcode_rule_settings (
+                    id,
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length
+                )
+                VALUES (1, 1, 4, 1, 5)
+                """
+            )
+
+
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS inspection_history (
@@ -209,6 +241,72 @@ class DatabaseManager:
 
         return rows
 
+    
+    def get_barcode_rule_settings(self):
+        with self.get_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length
+                FROM barcode_rule_settings
+                WHERE id = 1
+                """
+            ).fetchone()
+
+        if row is None:
+            raise RuntimeError(
+                "Konfigurasi ekstraksi barcode tidak ditemukan."
+            )
+
+        return dict(row)
+
+    def update_barcode_rule_settings(
+        self,
+        box_start_position,
+        box_length,
+        unit_start_position,
+        unit_length,
+    ):
+        values = {
+            "Box posisi mulai": box_start_position,
+            "Box length": box_length,
+            "Unit posisi mulai": unit_start_position,
+            "Unit length": unit_length,
+        }
+
+        for name, value in values.items():
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 1
+            ):
+                raise ValueError(
+                    "{} harus berupa bilangan bulat positif.".format(
+                        name
+                    )
+                )
+
+        with self.get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE barcode_rule_settings
+                SET
+                    box_start_position = ?,
+                    box_length = ?,
+                    unit_start_position = ?,
+                    unit_length = ?
+                WHERE id = 1
+                """,
+                (
+                    box_start_position,
+                    box_length,
+                    unit_start_position,
+                    unit_length,
+                ),
+            )
     
     def set_barcode_pair_active(self, pair_id, is_active):
         if (

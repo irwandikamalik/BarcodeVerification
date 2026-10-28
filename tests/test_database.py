@@ -232,3 +232,44 @@ def test_set_barcode_pair_active_rejects_unknown_pair(db):
 
     with pytest.raises(ValueError, match="Pasangan barcode tidak ditemukan"):
         db.set_barcode_pair_active(999, False)
+        
+
+def test_barcode_rule_settings_use_default_values(db):
+    settings = db.get_barcode_rule_settings()
+
+    assert settings == {
+        "box_start_position": 1,
+        "box_length": 4,
+        "unit_start_position": 1,
+        "unit_length": 5,
+    }
+
+
+def test_update_barcode_rule_settings(db):
+    db.update_barcode_rule_settings(
+        box_start_position=2,
+        box_length=4,
+        unit_start_position=3,
+        unit_length=5,
+    )
+
+    settings = db.get_barcode_rule_settings()
+
+    assert settings == {
+        "box_start_position": 2,
+        "box_length": 4,
+        "unit_start_position": 3,
+        "unit_length": 5,
+    }
+
+
+def test_update_barcode_rule_settings_rejects_invalid_values(db):
+    import pytest
+
+    with pytest.raises(ValueError):
+        db.update_barcode_rule_settings(
+            box_start_position=0,
+            box_length=4,
+            unit_start_position=1,
+            unit_length=5,
+        )
