@@ -93,3 +93,60 @@ def test_invalid_judgment_is_rejected(db):
             unit_key="UNIT",
             judgment="MAYBE",
         )
+
+
+def test_get_recent_inspections_returns_newest_first(tmp_path):
+    database = DatabaseManager(
+        tmp_path / "recent_inspections.db"
+    )
+
+    database.add_inspection(
+        operator_code="OP001",
+        operator_name="Operator Satu",
+        box_barcode="7036-0001",
+        unit_barcode="7830H-0001",
+        box_key="7036",
+        unit_key="7830H",
+        judgment="OK",
+    )
+
+    database.add_inspection(
+        operator_code="OP001",
+        operator_name="Operator Satu",
+        box_barcode="9999-0002",
+        unit_barcode="7830H-0002",
+        box_key="9999",
+        unit_key="7830H",
+        judgment="NG",
+        reason="Pasangan barcode tidak terdaftar.",
+    )
+
+    rows = database.get_recent_inspections()
+
+    assert len(rows) == 2
+    assert rows[0]["judgment"] == "NG"
+    assert rows[0]["box_key"] == "9999"
+    assert rows[1]["judgment"] == "OK"
+
+
+def test_get_recent_inspections_respects_limit(tmp_path):
+    database = DatabaseManager(
+        tmp_path / "limited_inspections.db"
+    )
+
+    for index in range(3):
+        database.add_inspection(
+            operator_code="OP001",
+            operator_name="Operator Satu",
+            box_barcode="BOX-{}".format(index),
+            unit_barcode="UNIT-{}".format(index),
+            box_key="BOX",
+            unit_key="UNIT",
+            judgment="OK",
+        )
+
+    rows = database.get_recent_inspections(limit=2)
+
+    assert len(rows) == 2
+    assert rows[0]["box_barcode"] == "BOX-2"
+    assert rows[1]["box_barcode"] == "BOX-1"

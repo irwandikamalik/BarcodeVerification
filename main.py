@@ -13,6 +13,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QHeaderView,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from app.barcode_service import BarcodeService
@@ -80,6 +83,34 @@ class MainWindow(QMainWindow):
         self.result_label.setMinimumHeight(100)
         self.set_result_style("neutral")
 
+        # Tabel riwayat inspeksi
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(7)
+        self.history_table.setHorizontalHeaderLabels([
+            "Waktu",
+            "Operator",
+            "Barcode Box",
+            "Barcode Unit",
+            "Box Key",
+            "Unit Key",
+            "Judgment",
+        ])
+
+        self.history_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.history_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.history_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.history_table.verticalHeader().setVisible(False)
+        self.history_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.history_table.horizontalHeader().setStretchLastSection(True)
+
         # Tombol START.
         self.start_button = QPushButton("START INSPECTION")
         self.start_button.setMinimumHeight(45)
@@ -91,7 +122,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.operator_status)
         layout.addWidget(input_group)
         layout.addWidget(self.result_label)
-        layout.addStretch()
+        layout.addWidget(QLabel("Riwayat Inspeksi Terbaru"))
+        layout.addWidget(self.history_table, 1)
         layout.addWidget(self.start_button)
 
         central_widget = QWidget()
@@ -106,8 +138,11 @@ class MainWindow(QMainWindow):
         self.logout_action = QAction("Logout Operator", self)
         self.logout_action.setEnabled(False)
         self.logout_action.triggered.connect(self.logout_operator)
+        
+        self.refresh_history()
 
         operator_menu.addAction(self.logout_action)
+        
 
     def set_result_style(self, status):
         styles = {
@@ -311,9 +346,46 @@ class MainWindow(QMainWindow):
         self.box_input.clear()
         self.unit_input.clear()
         self.start_button.setEnabled(False)
+        self.refresh_history()
 
         # Fokus kembali ke Barcode Box untuk scan berikutnya.
         QTimer.singleShot(0, self.box_input.setFocus)
+
+    
+    def refresh_history(self):
+        rows = self.database.get_recent_inspections(limit=10)
+
+        self.history_table.setRowCount(len(rows))
+
+        for row_index, row in enumerate(rows):
+            values = [
+                row["inspected_at"],
+                "{} ({})".format(
+                    row["operator_name"],
+                    row["operator_code"],
+                ),
+                row["box_barcode"],
+                row["unit_barcode"],
+                row["box_key"] or "-",
+                row["unit_key"] or "-",
+                row["judgment"],
+            ]
+
+            for column_index, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+
+                if column_index == 6:
+                    if value == "OK":
+                        item.setForeground(Qt.GlobalColor.darkGreen)
+                    else:
+                        item.setForeground(Qt.GlobalColor.red)
+
+                self.history_table.setItem(
+                    row_index,
+                    column_index,
+                    item,
+                )
+
 
 
 def main():

@@ -195,3 +195,32 @@ class DatabaseManager:
             )
 
             return cursor.lastrowid
+
+    
+    def get_recent_inspections(self, limit=10):
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise ValueError("Limit harus berupa bilangan bulat positif.")
+
+        with self.get_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    inspected_at,
+                    operator_code,
+                    operator_name,
+                    box_barcode,
+                    unit_barcode,
+                    box_key,
+                    unit_key,
+                    judgment,
+                    reason
+                FROM inspection_history
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        return rows
+
