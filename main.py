@@ -4,6 +4,7 @@ import sys
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QLabel,
@@ -24,6 +25,7 @@ from PySide6.QtGui import QAction
 
 from app.operator_window import OperatorWindow
 from app.barcode_pair_window import BarcodePairWindow
+from app.csv_exporter import CSVExporter
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -140,6 +142,19 @@ class MainWindow(QMainWindow):
         self.logout_action = QAction("Logout Operator", self)
         self.logout_action.setEnabled(False)
         self.logout_action.triggered.connect(self.logout_operator)
+
+        # Menu laporan.
+        report_menu = menu_bar.addMenu("Laporan")
+
+        self.export_csv_action = QAction(
+            "Ekspor Riwayat CSV",
+            self,
+        )
+        self.export_csv_action.triggered.connect(
+            self.export_inspection_history
+        )
+
+        report_menu.addAction(self.export_csv_action)
 
         master_data_menu = menu_bar.addMenu("Master Data")
 
@@ -382,6 +397,51 @@ class MainWindow(QMainWindow):
 
         # Fokus kembali ke Barcode Box untuk scan berikutnya.
         QTimer.singleShot(0, self.box_input.setFocus)
+
+    
+    def export_inspection_history(self):
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Simpan Riwayat Inspeksi",
+            "inspection_history.csv",
+            "CSV Files (*.csv)",
+        )
+
+        # Pengguna menekan Cancel.
+        if not output_path:
+            return
+
+        # Pastikan nama file berakhiran .csv.
+        if not output_path.lower().endswith(".csv"):
+            output_path += ".csv"
+
+        try:
+            exporter = CSVExporter(self.database)
+            result = exporter.export_inspection_history(
+                output_path
+            )
+
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "Ekspor Gagal",
+                "Riwayat inspeksi gagal diekspor.\n\n{}".format(
+                    error
+                ),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Ekspor Berhasil",
+            "Riwayat inspeksi berhasil diekspor.\n\n"
+            "Jumlah data: {}\n"
+            "Lokasi file:\n{}".format(
+                result["count"],
+                result["path"],
+            ),
+        )
+
 
     
     def refresh_history(self):
