@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QFormLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -16,6 +15,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.barcode_service import BarcodeService
+from app.database import DatabaseManager
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -24,13 +26,20 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Barcode Verification System")
         self.resize(900, 600)
 
-        # Status operator
+        # Inisialisasi database dan layanan barcode.
+        self.database = DatabaseManager()
+        self.barcode_service = BarcodeService(self.database)
+
+        # Identitas operator yang sedang login.
+        self.current_operator = None
+
+        # Status operator.
         self.operator_status = QLabel("Operator belum login")
         self.operator_status.setStyleSheet(
             "font-size: 14px; color: #666666;"
         )
 
-        # Input operator
+        # Input operator.
         self.operator_input = QLineEdit()
         self.operator_input.setPlaceholderText(
             "Masukkan kode operator"
@@ -39,27 +48,23 @@ class MainWindow(QMainWindow):
             self.validate_operator
         )
 
-        # Input barcode box
+        # Input barcode Box.
         self.box_input = QLineEdit()
-        self.box_input.setPlaceholderText(
-            "Scan Barcode Box"
-        )
+        self.box_input.setPlaceholderText("Scan Barcode Box")
         self.box_input.returnPressed.connect(
             self.focus_unit_input
         )
         self.box_input.setEnabled(False)
 
-        # Input barcode unit
+        # Input barcode Unit.
         self.unit_input = QLineEdit()
-        self.unit_input.setPlaceholderText(
-            "Scan Barcode Unit"
-        )
+        self.unit_input.setPlaceholderText("Scan Barcode Unit")
         self.unit_input.returnPressed.connect(
             self.focus_start_button
         )
         self.unit_input.setEnabled(False)
 
-        # Form input
+        # Form input.
         form_layout = QFormLayout()
         form_layout.addRow("Operator Code:", self.operator_input)
         form_layout.addRow("Barcode Box:", self.box_input)
@@ -68,28 +73,19 @@ class MainWindow(QMainWindow):
         input_group = QGroupBox("Inspection Input")
         input_group.setLayout(form_layout)
 
-        # Status inspeksi
+        # Status inspeksi.
         self.result_label = QLabel("Belum ada inspeksi")
         self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.result_label.setMinimumHeight(100)
-        self.result_label.setStyleSheet(
-            """
-            font-size: 24px;
-            font-weight: bold;
-            border: 1px solid #999999;
-            border-radius: 8px;
-            """
-        )
+        self.set_result_style("neutral")
 
-        # Tombol START
+        # Tombol START.
         self.start_button = QPushButton("START INSPECTION")
         self.start_button.setMinimumHeight(45)
         self.start_button.setEnabled(False)
-        self.start_button.clicked.connect(
-            self.start_inspection
-        )
+        self.start_button.clicked.connect(self.start_inspection)
 
-        # Layout utama
+        # Layout utama.
         layout = QVBoxLayout()
         layout.addWidget(self.operator_status)
         layout.addWidget(input_group)
@@ -100,6 +96,33 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
+
+    def set_result_style(self, status):
+        styles = {
+            "neutral": """
+                font-size: 24px;
+                font-weight: bold;
+                color: #555555;
+                border: 1px solid #999999;
+                border-radius: 8px;
+            """,
+            "ok": """
+                font-size: 28px;
+                font-weight: bold;
+                color: #176B35;
+                border: 2px solid #176B35;
+                border-radius: 8px;
+            """,
+            "ng": """
+                font-size: 28px;
+                font-weight: bold;
+                color: #B42318;
+                border: 2px solid #B42318;
+                border-radius: 8px;
+            """,
+        }
+
+        self.result_label.setStyleSheet(styles[status])
 
     def validate_operator(self):
         operator_code = self.operator_input.text().strip()
@@ -113,20 +136,39 @@ class MainWindow(QMainWindow):
             self.operator_input.setFocus()
             return
 
-        # Validasi sementara, belum menggunakan database.
+        operator = self.barcode_service.validate_operator(
+            operator_code
+        )
+
+        if operator is None:
+            self.operator_status.setText(
+                "Operator tidak terdaftar atau tidak aktif."
+            )
+            self.operator_status.setStyleSheet(
+                "font-size: 14px; color: #B42318;"
+            )
+            self.operator_input.clear()
+            self.operator_input.setFocus()
+            return
+
+        self.current_operator = operator
+
         self.operator_status.setText(
-            f"Operator aktif: {operator_code}"
+            "Operator aktif: {} ({})".format(
+                operator["operator_name"],
+                operator["operator_code"],
+            )
         )
         self.operator_status.setStyleSheet(
-            "font-size: 14px; color: green;"
+            "font-size: 14px; color: #176B35;"
         )
 
         self.operator_input.setEnabled(False)
         self.box_input.setEnabled(True)
         self.unit_input.setEnabled(True)
+        self.start_button.setEnabled(False)
+
         self.box_input.setFocus()
-
-
 
     def focus_unit_input(self):
         box_barcode = self.box_input.text().strip()
@@ -135,16 +177,17 @@ class MainWindow(QMainWindow):
             self.result_label.setText(
                 "Barcode Box belum diisi!"
             )
+            self.set_result_style("ng")
             self.box_input.setFocus()
             return
 
         self.result_label.setText(
             "Barcode Box diterima. Scan Barcode Unit."
         )
+        self.set_result_style("neutral")
 
-        # Pindahkan fokus setelah event Enter selesai diproses.
+        self.start_button.setEnabled(False)
         QTimer.singleShot(0, self.unit_input.setFocus)
-
 
     def focus_start_button(self):
         unit_barcode = self.unit_input.text().strip()
@@ -153,6 +196,7 @@ class MainWindow(QMainWindow):
             self.result_label.setText(
                 "Barcode Unit belum diisi!"
             )
+            self.set_result_style("ng")
             QTimer.singleShot(0, self.unit_input.setFocus)
             return
 
@@ -160,13 +204,21 @@ class MainWindow(QMainWindow):
             "Barcode Unit diterima. Memulai inspeksi..."
         )
 
-        self.start_button.setEnabled(True)
-
-        # Tunggu event Enter selesai, lalu jalankan inspeksi.
+        # Scanner biasanya mengirim Enter di akhir barcode.
+        # Jalankan inspeksi setelah event Enter selesai.
         QTimer.singleShot(0, self.start_inspection)
 
-
     def start_inspection(self):
+        if self.current_operator is None:
+            QMessageBox.warning(
+                self,
+                "Operator Required",
+                "Validasi operator terlebih dahulu.",
+            )
+            self.operator_input.setEnabled(True)
+            self.operator_input.setFocus()
+            return
+
         box_barcode = self.box_input.text().strip()
         unit_barcode = self.unit_input.text().strip()
 
@@ -176,24 +228,51 @@ class MainWindow(QMainWindow):
                 "Barcode Required",
                 "Barcode Box dan Barcode Unit wajib diisi.",
             )
+            if not box_barcode:
+                self.box_input.setFocus()
+            else:
+                self.unit_input.setFocus()
             return
 
-        # Hasil sementara. Pemeriksaan pasangan barcode
-        # yang sebenarnya akan dibuat pada tahap berikutnya.
-        self.result_label.setText("INSPECTION RECORDED")
-        self.result_label.setStyleSheet(
-            """
-            font-size: 24px;
-            font-weight: bold;
-            color: #176B35;
-            border: 2px solid #176B35;
-            border-radius: 8px;
-            """
-        )
+        self.start_button.setEnabled(False)
 
+        try:
+            result = self.barcode_service.inspect(
+                operator_code=self.current_operator["operator_code"],
+                operator_name=self.current_operator["operator_name"],
+                box_barcode=box_barcode,
+                unit_barcode=unit_barcode,
+            )
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Inspection Error",
+                "Pemeriksaan gagal diproses.\n\n{}".format(error),
+            )
+            self.start_button.setEnabled(True)
+            return
+
+        if result.judgment == "OK":
+            self.result_label.setText(
+                "OK\nBox: {} | Unit: {}".format(
+                    result.box_key,
+                    result.unit_key,
+                )
+            )
+            self.set_result_style("ok")
+        else:
+            self.result_label.setText(
+                "NG\n{}".format(result.reason or "Pemeriksaan gagal.")
+            )
+            self.set_result_style("ng")
+
+        # Operator tetap login untuk inspeksi berikutnya.
         self.box_input.clear()
         self.unit_input.clear()
-        self.box_input.setFocus()
+        self.start_button.setEnabled(False)
+
+        # Fokus kembali ke Barcode Box untuk scan berikutnya.
+        QTimer.singleShot(0, self.box_input.setFocus)
 
 
 def main():
