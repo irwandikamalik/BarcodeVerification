@@ -1,0 +1,26 @@
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Pytest cache
+.pytest_cache/
+
+# Local database
+data/*.db
+data/*.db-*
+
+# Backup files
+backups/*
+!backups/.gitkeep
+
+# Exported inspection results
+exports/*
+!exports/.gitkeep
+
+# IDE settings
+.vscode/
